@@ -103,7 +103,7 @@ async def list_matches(
             "matches": matches,
         }
     except Exception as exc:
-        raise HTTPException(status_code=500, detail=str(exc)) from exc
+        raise HTTPException(status_code=500, detail="Internal server error") from exc
 
 
 @router.get("/{match_id}")
@@ -172,7 +172,7 @@ async def get_match(
     except HTTPException:
         raise
     except Exception as exc:
-        raise HTTPException(status_code=500, detail=str(exc)) from exc
+        raise HTTPException(status_code=500, detail="Internal server error") from exc
 
 
 @router.get("/{match_id}/events")
@@ -199,7 +199,7 @@ async def get_match_events(
         ]
         return {"match_id": match_id, "events": events}
     except Exception as exc:
-        raise HTTPException(status_code=500, detail=str(exc)) from exc
+        raise HTTPException(status_code=500, detail="Internal server error") from exc
 
 
 @router.get("/{match_id}/statistics")
@@ -232,7 +232,7 @@ async def get_match_statistics(
 
         return {"match_id": match_id, "statistics": teams}
     except Exception as exc:
-        raise HTTPException(status_code=500, detail=str(exc)) from exc
+        raise HTTPException(status_code=500, detail="Internal server error") from exc
 
 
 def _fetch_and_cache_events(match_id: int, conn: duckdb.DuckDBPyConnection) -> list:
@@ -406,4 +406,4 @@ async def list_teams(
         ]
         return {"teams": teams}
     except Exception as exc:
-        raise HTTPException(status_code=500, detail=str(exc)) from exc
+        raise HTTPException(status_code=500, detail="Internal server error") from exc

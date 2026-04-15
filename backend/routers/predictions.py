@@ -29,7 +29,7 @@ async def prediction_for_match(
     except HTTPException:
         raise
     except Exception as exc:
-        raise HTTPException(status_code=500, detail=str(exc)) from exc
+        raise HTTPException(status_code=500, detail="Internal server error") from exc
 
 
 @router.post("/batch")
@@ -41,4 +41,4 @@ async def batch_predictions(
         results = get_batch_predictions(request.match_ids, conn)
         return {"predictions": results, "count": len(results)}
     except Exception as exc:
-        raise HTTPException(status_code=500, detail=str(exc)) from exc
+        raise HTTPException(status_code=500, detail="Internal server error") from exc

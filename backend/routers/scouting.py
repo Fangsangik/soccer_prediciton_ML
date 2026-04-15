@@ -30,7 +30,7 @@ async def search(
         players = search_players(q, conn, league, limit)
         return {"players": players, "count": len(players)}
     except Exception as exc:
-        raise HTTPException(status_code=500, detail=str(exc)) from exc
+        raise HTTPException(status_code=500, detail="Internal server error") from exc
 
 
 @router.get("/players/{player_id}")
@@ -47,7 +47,7 @@ async def player_profile(
     except HTTPException:
         raise
     except Exception as exc:
-        raise HTTPException(status_code=500, detail=str(exc)) from exc
+        raise HTTPException(status_code=500, detail="Internal server error") from exc
 
 
 @router.post("/similar")
@@ -69,7 +69,7 @@ async def similar_players(
     except HTTPException:
         raise
     except Exception as exc:
-        raise HTTPException(status_code=500, detail=str(exc)) from exc
+        raise HTTPException(status_code=500, detail="Internal server error") from exc
 
 
 @router.get("/undervalued")
@@ -94,7 +94,7 @@ async def undervalued_players(
         players = get_undervalued(filters, conn, season, top_n)
         return {"undervalued_players": players, "count": len(players)}
     except Exception as exc:
-        raise HTTPException(status_code=500, detail=str(exc)) from exc
+        raise HTTPException(status_code=500, detail="Internal server error") from exc
 
 
 @router.get("/team-key-players/{team_name}")
@@ -123,7 +123,7 @@ async def team_key_players(
         ]
         return {"team": team_name, "key_players": players}
     except Exception as exc:
-        raise HTTPException(status_code=500, detail=str(exc)) from exc
+        raise HTTPException(status_code=500, detail="Internal server error") from exc
 
 
 @router.get("/rankings")
@@ -249,7 +249,7 @@ async def player_rankings(
         ]
         return {"category": category, "players": players, "count": len(players)}
     except Exception as exc:
-        raise HTTPException(status_code=500, detail=str(exc)) from exc
+        raise HTTPException(status_code=500, detail="Internal server error") from exc
 
 
 @router.get("/top-player")
@@ -287,4 +287,4 @@ async def top_player(
             }
         }
     except Exception as exc:
-        raise HTTPException(status_code=500, detail=str(exc)) from exc
+        raise HTTPException(status_code=500, detail="Internal server error") from exc

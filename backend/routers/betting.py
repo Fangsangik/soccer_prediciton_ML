@@ -59,7 +59,7 @@ async def calculate_expected_value(
     except HTTPException:
         raise
     except Exception as exc:
-        raise HTTPException(status_code=500, detail=str(exc)) from exc
+        raise HTTPException(status_code=500, detail="Internal server error") from exc
 
 
 @router.get("/value-bets")
@@ -72,4 +72,4 @@ async def get_value_bets(
         bets = scan_value_bets(league, min_ev, conn)
         return {"value_bets": bets, "count": len(bets)}
     except Exception as exc:
-        raise HTTPException(status_code=500, detail=str(exc)) from exc
+        raise HTTPException(status_code=500, detail="Internal server error") from exc

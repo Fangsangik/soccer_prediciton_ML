@@ -34,7 +34,7 @@ async def list_fpl_players(
         players = get_players(conn, position, min_price, max_price, sort_by, limit)
         return {"players": players, "count": len(players)}
     except Exception as exc:
-        raise HTTPException(status_code=500, detail=str(exc)) from exc
+        raise HTTPException(status_code=500, detail="Internal server error") from exc
 
 
 @router.post("/optimize")
@@ -54,7 +54,7 @@ async def optimize_squad(
         )
         return result
     except Exception as exc:
-        raise HTTPException(status_code=500, detail=str(exc)) from exc
+        raise HTTPException(status_code=500, detail="Internal server error") from exc
 
 
 @router.get("/gameweek/{gw}")
@@ -69,4 +69,4 @@ async def gameweek_info(
     except HTTPException:
         raise
     except Exception as exc:
-        raise HTTPException(status_code=500, detail=str(exc)) from exc
+        raise HTTPException(status_code=500, detail="Internal server error") from exc

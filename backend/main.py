@@ -10,6 +10,7 @@ from fastapi.staticfiles import StaticFiles
 
 from backend.routers import health, matches, predictions, betting, fpl, scouting, sync, user, standings
 from backend.scheduler import setup_scheduler, shutdown_scheduler
+from backend.middleware import global_exception_handler
 
 
 @asynccontextmanager
@@ -18,32 +19,9 @@ async def lifespan(app: FastAPI):
     from backend.config import settings
 
     init_db()
-    conn = get_db()
+    print("[startup] DB initialized. Server ready. Data syncs in background.")
 
-    row = conn.execute("SELECT COUNT(*) FROM leagues").fetchone()
-    has_data = row and row[0] > 0
-
-    if not has_data:
-        # Sync real match data from football-data.org
-        if settings.FOOTBALL_DATA_API_KEY:
-            try:
-                from backend.collectors.football_data import sync_all_leagues
-                sync_all_leagues(conn, season="2024")
-                print("[startup] Real match data synced.")
-            except Exception as e:
-                print(f"[startup] football-data sync failed: {e}")
-
-        # Sync real FPL data (free, no key needed)
-        try:
-            from backend.collectors.fpl_api import sync_fpl_data
-            sync_fpl_data(conn)
-            print("[startup] Real FPL data synced.")
-        except Exception as e:
-            print(f"[startup] FPL sync skipped: {e}")
-    else:
-        print("[startup] DB already has data, skipping sync.")
-
-    # Start periodic data refresh scheduler
+    # Start scheduler (handles all syncing in background, non-blocking)
     setup_scheduler(lambda: get_db())
 
     yield
@@ -66,6 +44,8 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+app.add_exception_handler(Exception, global_exception_handler)
 
 # Include all routers under /api/v1
 API_PREFIX = "/api/v1"
