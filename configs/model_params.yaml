@@ -1,0 +1,35 @@
+match_predictor:
+  model_type: xgboost
+  params:
+    n_estimators: 200
+    max_depth: 6
+    learning_rate: 0.05
+    subsample: 0.8
+  features:
+    - home_xg_rolling_5
+    - away_xg_rolling_5
+    - home_xga_rolling_5
+    - away_xga_rolling_5
+    - home_form_points
+    - away_form_points
+    - home_advantage
+    - rest_days_diff
+    - h2h_home_win_rate
+
+fpl_optimizer:
+  horizon_default: 5
+  transfer_penalty: 4
+  budget_default: 100.0
+
+player_similarity:
+  default_features:
+    - xg_per_90
+    - xa_per_90
+    - shots_per_90
+    - key_passes_per_90
+    - progressive_carries_per_90
+    - tackles_per_90
+    - interceptions_per_90
+    - aerials_won_per_90
+  umap_n_neighbors: 15
+  umap_min_dist: 0.1

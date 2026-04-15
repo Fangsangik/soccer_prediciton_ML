@@ -1,0 +1,26 @@
+leagues:
+  PL:
+    name: Premier League
+    country: England
+    football_data_code: PL
+    seasons: ["2024-25", "2023-24", "2022-23"]
+  BL1:
+    name: Bundesliga
+    country: Germany
+    football_data_code: BL1
+    seasons: ["2024-25"]
+  SA:
+    name: Serie A
+    country: Italy
+    football_data_code: SA
+    seasons: ["2024-25"]
+  PD:
+    name: La Liga
+    country: Spain
+    football_data_code: PD
+    seasons: ["2024-25"]
+  FL1:
+    name: Ligue 1
+    country: France
+    football_data_code: FL1
+    seasons: ["2024-25"]
