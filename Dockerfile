@@ -23,9 +23,8 @@ RUN cd frontend && npx vite build
 # Backend
 COPY backend/ backend/
 COPY configs/ configs/
-COPY data/ data/
 
-# Create data dir
+# Create data dir (populated at runtime)
 RUN mkdir -p data
 
 EXPOSE 8000
