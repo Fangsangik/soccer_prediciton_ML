@@ -41,11 +41,11 @@ def _headers() -> dict[str, str]:
 def _get(path: str, params: dict | None = None) -> dict[str, Any]:
     """Make a rate-limited GET request to football-data.org."""
     url = f"{BASE_URL}{path}"
-    resp = httpx.get(url, headers=_headers(), params=params, timeout=15)
+    resp = httpx.get(url, headers=_headers(), params=params, timeout=60)
     if resp.status_code == 429:
         # Rate limited - wait and retry once
         time.sleep(6)
-        resp = httpx.get(url, headers=_headers(), params=params, timeout=15)
+        resp = httpx.get(url, headers=_headers(), params=params, timeout=60)
     resp.raise_for_status()
     return resp.json()
 

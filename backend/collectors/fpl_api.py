@@ -23,7 +23,7 @@ POS_MAP = {1: "GKP", 2: "DEF", 3: "MID", 4: "FWD"}
 
 def _get(path: str) -> dict[str, Any] | list:
     url = f"{FPL_BASE}{path}"
-    resp = httpx.get(url, timeout=15, follow_redirects=True)
+    resp = httpx.get(url, timeout=60, follow_redirects=True)
     resp.raise_for_status()
     return resp.json()
 

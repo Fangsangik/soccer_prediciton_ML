@@ -29,7 +29,7 @@ def _headers() -> dict[str, str]:
 
 def _get(path: str, params: dict | None = None) -> dict[str, Any]:
     url = f"{BASE_URL}{path}"
-    resp = httpx.get(url, headers=_headers(), params=params, timeout=15)
+    resp = httpx.get(url, headers=_headers(), params=params, timeout=60)
     resp.raise_for_status()
     data = resp.json()
     # Check for API errors
