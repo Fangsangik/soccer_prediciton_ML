@@ -7,7 +7,8 @@ from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel, Field
 import duckdb
 
-from backend.deps import get_database
+from backend.deps import get_database, get_current_user
+from backend.auth import create_access_token
 from backend.services.coin_service import (
     register_user,
     login_user,
@@ -61,7 +62,13 @@ async def register(
     conn: duckdb.DuckDBPyConnection = Depends(get_database),
 ) -> dict[str, Any]:
     try:
-        return register_user(body.username, conn, body.password)
+        result = register_user(body.username, conn, body.password)
+        token = create_access_token(
+            user_id=result["user_id"],
+            username=result["username"],
+            is_admin=result.get("is_admin", False),
+        )
+        return {**result, "token": token}
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
     except Exception as exc:
@@ -74,7 +81,13 @@ async def login(
     conn: duckdb.DuckDBPyConnection = Depends(get_database),
 ) -> dict[str, Any]:
     try:
-        return login_user(body.username, body.password, conn)
+        result = login_user(body.username, body.password, conn)
+        token = create_access_token(
+            user_id=result["user_id"],
+            username=result["username"],
+            is_admin=result.get("is_admin", False),
+        )
+        return {**result, "token": token}
     except ValueError as exc:
         raise HTTPException(status_code=401, detail=str(exc)) from exc
     except Exception as exc:
@@ -85,6 +98,7 @@ async def login(
 async def checkin(
     body: CheckinRequest,
     conn: duckdb.DuckDBPyConnection = Depends(get_database),
+    current_user: dict = Depends(get_current_user),
 ) -> dict[str, Any]:
     try:
         return daily_checkin(body.user_id, conn)
@@ -171,6 +185,7 @@ async def get_transactions(
 async def create_bet(
     body: BetRequest,
     conn: duckdb.DuckDBPyConnection = Depends(get_database),
+    current_user: dict = Depends(get_current_user),
 ) -> dict[str, Any]:
     try:
         return place_bet(body.user_id, body.match_id, body.bet_type, body.amount, conn)
@@ -232,6 +247,7 @@ async def get_bets(
 async def set_preferences(
     body: PreferencesRequest,
     conn: duckdb.DuckDBPyConnection = Depends(get_database),
+    current_user: dict = Depends(get_current_user),
 ) -> dict[str, Any]:
     try:
         row = conn.execute(
@@ -315,6 +331,7 @@ class ModifyBetRequest(BaseModel):
 async def modify_user_bet(
     body: ModifyBetRequest,
     conn: duckdb.DuckDBPyConnection = Depends(get_database),
+    current_user: dict = Depends(get_current_user),
 ) -> dict[str, Any]:
     """Modify a pending bet (cancel + re-place). Must be 1h+ before kickoff."""
     try:
@@ -329,6 +346,7 @@ async def modify_user_bet(
 async def cancel_user_bet(
     body: CancelBetRequest,
     conn: duckdb.DuckDBPyConnection = Depends(get_database),
+    current_user: dict = Depends(get_current_user),
 ) -> dict[str, Any]:
     """Cancel a pending bet and refund coins. Only if match hasn't started."""
     try:
@@ -354,10 +372,12 @@ def _check_admin(conn: duckdb.DuckDBPyConnection, user_id: int) -> None:
 async def admin_give_coins(
     body: AdminGiveCoinsRequest,
     conn: duckdb.DuckDBPyConnection = Depends(get_database),
+    current_user: dict = Depends(get_current_user),
 ) -> dict[str, Any]:
     """Admin-only: give coins to any user."""
     try:
-        _check_admin(conn, body.admin_user_id)
+        if not current_user.get("is_admin"):
+            raise HTTPException(status_code=403, detail="Admin access required")
 
         target = conn.execute(
             "SELECT coins FROM users WHERE user_id = ?", [body.target_user_id]
@@ -390,10 +410,12 @@ async def admin_give_coins(
 async def admin_reset_user(
     body: AdminResetUserRequest,
     conn: duckdb.DuckDBPyConnection = Depends(get_database),
+    current_user: dict = Depends(get_current_user),
 ) -> dict[str, Any]:
     """Admin-only: reset a user's coins to 50,000."""
     try:
-        _check_admin(conn, body.admin_user_id)
+        if not current_user.get("is_admin"):
+            raise HTTPException(status_code=403, detail="Admin access required")
 
         target = conn.execute(
             "SELECT user_id FROM users WHERE user_id = ?", [body.target_user_id]
@@ -424,10 +446,12 @@ async def admin_reset_user(
 async def admin_list_users(
     admin_user_id: int,
     conn: duckdb.DuckDBPyConnection = Depends(get_database),
+    current_user: dict = Depends(get_current_user),
 ) -> dict[str, Any]:
     """Admin-only: list all users."""
     try:
-        _check_admin(conn, admin_user_id)
+        if not current_user.get("is_admin"):
+            raise HTTPException(status_code=403, detail="Admin access required")
 
         rows = conn.execute(
             "SELECT user_id, username, coins, is_admin, created_at FROM users ORDER BY user_id"

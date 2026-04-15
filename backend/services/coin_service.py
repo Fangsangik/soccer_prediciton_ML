@@ -1,7 +1,7 @@
 """Coin system business logic: registration, check-in, betting."""
 from __future__ import annotations
 
-import hashlib
+import bcrypt
 from datetime import date, datetime
 from typing import Any
 
@@ -12,7 +12,11 @@ ADMIN_USERNAMES = {"Sangik Hwang"}
 
 
 def _hash_password(password: str) -> str:
-    return hashlib.sha256(password.encode()).hexdigest()
+    return bcrypt.hashpw(password.encode(), bcrypt.gensalt()).decode()
+
+
+def _verify_password(password: str, hashed: str) -> bool:
+    return bcrypt.checkpw(password.encode(), hashed.encode())
 
 
 def _next_id(conn: duckdb.DuckDBPyConnection, table: str, pk: str) -> int:
@@ -66,8 +70,7 @@ def login_user(username: str, password: str, conn: duckdb.DuckDBPyConnection) ->
 
     # If no password set, allow login without password (legacy accounts)
     if stored_hash is not None:
-        input_hash = _hash_password(password)
-        if input_hash != stored_hash:
+        if not _verify_password(password, stored_hash):
             raise ValueError("Invalid username or password")
 
     if hasattr(last_checkin, "isoformat"):

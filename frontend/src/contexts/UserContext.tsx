@@ -17,6 +17,11 @@ interface User {
   favorite_team_id: number | null;
   last_checkin: string | null;
   is_admin: boolean;
+  token?: string;
+}
+
+interface AuthResponse extends User {
+  token: string;
 }
 
 interface UserContextValue {
@@ -40,6 +45,7 @@ const UserContext = createContext<UserContextValue>({
 });
 
 const STORAGE_KEY = 'fa_user_id';
+const TOKEN_KEY = 'auth_token';
 
 export function UserProvider({ children }: { children: ReactNode }) {
   const [user, setUser] = useState<User | null>(null);
@@ -50,6 +56,7 @@ export function UserProvider({ children }: { children: ReactNode }) {
       setUser(data);
     } catch {
       localStorage.removeItem(STORAGE_KEY);
+      localStorage.removeItem(TOKEN_KEY);
       setUser(null);
     }
   }, []);
@@ -57,7 +64,8 @@ export function UserProvider({ children }: { children: ReactNode }) {
   // Restore session from localStorage on mount
   useEffect(() => {
     const stored = localStorage.getItem(STORAGE_KEY);
-    if (stored) {
+    const token = localStorage.getItem(TOKEN_KEY);
+    if (stored && token) {
       const userId = parseInt(stored, 10);
       if (!isNaN(userId)) {
         fetchUser(userId);
@@ -66,15 +74,17 @@ export function UserProvider({ children }: { children: ReactNode }) {
   }, [fetchUser]);
 
   const login = useCallback(async (username: string, password: string) => {
-    const data = await client.post('/user/login', { username, password }) as unknown as User;
+    const data = await client.post('/user/login', { username, password }) as unknown as AuthResponse;
     localStorage.setItem(STORAGE_KEY, String(data.user_id));
+    localStorage.setItem(TOKEN_KEY, data.token);
     setUser(data);
   }, []);
 
   const register = useCallback(async (username: string, password: string) => {
     try {
-      const data = await client.post('/user/register', { username, password }) as unknown as User;
+      const data = await client.post('/user/register', { username, password }) as unknown as AuthResponse;
       localStorage.setItem(STORAGE_KEY, String(data.user_id));
+      localStorage.setItem(TOKEN_KEY, data.token);
       setUser(data);
     } catch (err: unknown) {
       const message = err instanceof Error ? err.message : String(err);
@@ -99,6 +109,7 @@ export function UserProvider({ children }: { children: ReactNode }) {
 
   const logout = useCallback(() => {
     localStorage.removeItem(STORAGE_KEY);
+    localStorage.removeItem(TOKEN_KEY);
     setUser(null);
   }, []);
 

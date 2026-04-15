@@ -14,7 +14,7 @@ COPY pyproject.toml ./
 RUN pip install --no-cache-dir \
     fastapi uvicorn[standard] duckdb xgboost lightgbm scikit-learn \
     pulp requests beautifulsoup4 pydantic pydantic-settings httpx \
-    pandas numpy scipy apscheduler
+    pandas numpy scipy apscheduler bcrypt "python-jose[cryptography]"
 
 # Frontend build
 COPY frontend/package.json frontend/package-lock.json* frontend/
