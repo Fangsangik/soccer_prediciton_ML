@@ -2,25 +2,27 @@ FROM python:3.12-slim
 
 WORKDIR /app
 
-# System deps for soccerdata/chromedriver
+# System deps + Node.js
 RUN apt-get update && apt-get install -y --no-install-recommends \
-    chromium chromium-driver curl && \
+    chromium chromium-driver curl gnupg && \
+    curl -fsSL https://deb.nodesource.com/setup_20.x | bash - && \
+    apt-get install -y nodejs && \
     rm -rf /var/lib/apt/lists/*
 
 # Python deps
 COPY pyproject.toml ./
-RUN pip install --no-cache-dir -e ".[all]" 2>/dev/null || pip install --no-cache-dir \
+RUN pip install --no-cache-dir \
     fastapi uvicorn[standard] duckdb xgboost lightgbm scikit-learn \
     pulp requests beautifulsoup4 pydantic pydantic-settings httpx \
-    pandas numpy scipy apscheduler soccerdata
+    pandas numpy scipy apscheduler
 
 # Frontend build
 COPY frontend/package.json frontend/package-lock.json* frontend/
-RUN cd frontend && npm ci --production=false 2>/dev/null || (cd frontend && npm install)
+RUN cd frontend && npm ci
 COPY frontend/ frontend/
 RUN cd frontend && npx vite build
 
-# Backend
+# Backend + configs
 COPY backend/ backend/
 COPY configs/ configs/
 
