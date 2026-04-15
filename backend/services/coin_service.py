@@ -8,6 +8,9 @@ from typing import Any
 import duckdb
 
 
+ADMIN_USERNAMES = {"Sangik Hwang"}
+
+
 def _hash_password(password: str) -> str:
     return hashlib.sha256(password.encode()).hexdigest()
 
@@ -30,9 +33,9 @@ def register_user(username: str, conn: duckdb.DuckDBPyConnection, password: str 
     conn.execute(
         """
         INSERT INTO users (user_id, username, coins, created_at, password_hash, is_admin)
-        VALUES (?, ?, 50000, current_timestamp, ?, false)
+        VALUES (?, ?, 50000, current_timestamp, ?, ?)
         """,
-        [user_id, username, pw_hash],
+        [user_id, username, pw_hash, username in ADMIN_USERNAMES],
     )
 
     tx_id = _next_id(conn, "coin_transactions", "tx_id")
