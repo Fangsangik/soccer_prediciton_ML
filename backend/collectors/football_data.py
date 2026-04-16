@@ -41,11 +41,12 @@ def _headers() -> dict[str, str]:
 def _get(path: str, params: dict | None = None) -> dict[str, Any]:
     """Make a rate-limited GET request to football-data.org."""
     url = f"{BASE_URL}{path}"
-    resp = httpx.get(url, headers=_headers(), params=params, timeout=60)
+    # Short timeout (10s) to prevent scheduler/web server from blocking on API outages
+    resp = httpx.get(url, headers=_headers(), params=params, timeout=10)
     if resp.status_code == 429:
         # Rate limited - wait and retry once
         time.sleep(6)
-        resp = httpx.get(url, headers=_headers(), params=params, timeout=60)
+        resp = httpx.get(url, headers=_headers(), params=params, timeout=10)
     resp.raise_for_status()
     return resp.json()
 
@@ -189,15 +190,26 @@ def sync_league(conn: duckdb.DuckDBPyConnection, league_code: str, season: str =
 
 
 def sync_all_leagues(conn: duckdb.DuckDBPyConnection, season: str = "2025") -> dict[str, Any]:
-    """Sync all supported leagues. Respects rate limits (6s between requests)."""
+    """Sync all supported leagues. Respects rate limits (6s between requests).
+
+    Circuit breaker: skip remaining leagues after 3 consecutive failures to prevent
+    long blocking on API outages or network issues.
+    """
     results = {}
+    consecutive_failures = 0
     for code in LEAGUE_MAP:
+        if consecutive_failures >= 3:
+            results[code] = {"skipped": "circuit breaker open"}
+            print(f"[football-data] {code} skipped (3 consecutive failures)")
+            continue
         try:
             stats = sync_league(conn, code, season)
             results[code] = stats
             print(f"[football-data] {code}: {stats}")
+            consecutive_failures = 0
             time.sleep(6)
         except Exception as e:
             results[code] = {"error": str(e)}
             print(f"[football-data] {code} failed: {e}")
+            consecutive_failures += 1
     return results
