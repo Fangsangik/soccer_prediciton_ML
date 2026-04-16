@@ -22,7 +22,7 @@ async def lifespan(app: FastAPI):
     print("[startup] DB initialized. Server ready. Data syncs in background.")
 
     # Start scheduler (handles all syncing in background, non-blocking)
-    setup_scheduler(lambda: get_db())
+    setup_scheduler(lambda: get_db().cursor())
 
     yield
 
