@@ -31,10 +31,10 @@ def check_and_sync(conn) -> int:
     ).fetchone()[0]
 
     # Always sync football-data.org leagues (generous rate limit)
+    # NOTE: current season (2025) only in poll loop. Previous season (2024) runs once daily.
     try:
         from backend.collectors.football_data import sync_all_leagues
         print("[scheduler] Starting match sync...")
-        sync_all_leagues(conn, season="2024")
         sync_all_leagues(conn, season="2025")
         print("[scheduler] Match sync complete.")
     except Exception as e:
@@ -114,6 +114,18 @@ def setup_scheduler(conn_factory: Callable) -> None:
             print("[scheduler] FPL sync complete.")
         except Exception as e:
             print(f"[scheduler] FPL sync failed: {e}")
+
+    @scheduler.scheduled_job("cron", hour=4, id="sync_historical_2024")
+    def sync_historical_2024() -> None:
+        """Previous season (2024) syncs once a day. Historical reference data."""
+        conn = conn_factory()
+        try:
+            from backend.collectors.football_data import sync_all_leagues
+            print("[scheduler] Starting 2024 historical sync...")
+            sync_all_leagues(conn, season="2024")
+            print("[scheduler] 2024 historical sync complete.")
+        except Exception as e:
+            print(f"[scheduler] 2024 historical sync failed: {e}")
 
     @scheduler.scheduled_job("cron", hour=6, id="sync_fbref")
     def sync_fbref() -> None:
