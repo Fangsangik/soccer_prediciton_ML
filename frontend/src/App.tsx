@@ -10,6 +10,7 @@ import PlayerScouting from '@/pages/PlayerScouting';
 import ModelPerformance from '@/pages/ModelPerformance';
 import Profile from '@/pages/Profile';
 import Standings from '@/pages/Standings';
+import TitleRace from '@/pages/TitleRace';
 
 export default function App() {
   return (
@@ -19,6 +20,7 @@ export default function App() {
       <Routes>
         <Route path="/" element={<Dashboard />} />
         <Route path="/standings" element={<Standings />} />
+        <Route path="/title-race" element={<TitleRace />} />
         <Route path="/matches" element={<MatchPrediction />} />
         <Route path="/betting" element={<BettingEV />} />
         <Route path="/fpl" element={<FPLOptimizer />} />
