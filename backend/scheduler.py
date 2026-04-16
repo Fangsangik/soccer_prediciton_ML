@@ -79,6 +79,14 @@ def check_and_sync(conn) -> int:
     return POLL_INTERVAL_IDLE
 
 
+def _sync_historical(conn, season: str) -> None:
+    """Sync a single historical season. Used at startup for 2023/2024."""
+    from backend.collectors.football_data import sync_all_leagues
+    print(f"[scheduler] Starting historical sync for {season}...")
+    sync_all_leagues(conn, season=season)
+    print(f"[scheduler] Historical sync for {season} complete.")
+
+
 async def smart_poll_loop(conn_factory: Callable) -> None:
     """Async loop with adaptive poll intervals. Runs sync in executor to avoid blocking."""
     await asyncio.sleep(10)  # Wait for server to fully start
@@ -97,9 +105,27 @@ async def smart_poll_loop(conn_factory: Callable) -> None:
 def setup_scheduler(conn_factory: Callable) -> None:
     """Configure smart polling loop + APScheduler for daily/weekly jobs."""
 
+    # One-time startup sync for historical seasons (2023, 2024).
+    # These are completed seasons so data doesn't change — only need to run
+    # once per cold start (Render free tier wipes filesystem on restart).
+    async def _startup_historical_sync():
+        """Run historical season sync once at startup, in background."""
+        await asyncio.sleep(15)  # Wait for main poll loop to finish first cycle
+        loop = asyncio.get_event_loop()
+        for season in ("2023", "2024"):
+            try:
+                await loop.run_in_executor(
+                    None, lambda s=season: _sync_historical(conn_factory(), s)
+                )
+            except Exception as e:
+                print(f"[scheduler] Startup historical sync {season} failed: {e}")
+
+    loop = asyncio.get_event_loop()
+    loop.create_task(_startup_historical_sync())
+    print("[scheduler] Historical startup sync queued (2023, 2024)")
+
     # Start smart poll loop as asyncio task
     global _poll_task
-    loop = asyncio.get_event_loop()
     _poll_task = loop.create_task(smart_poll_loop(conn_factory))
     print("[scheduler] Smart poll loop started (adaptive intervals: 60s/300s/1800s)")
 
