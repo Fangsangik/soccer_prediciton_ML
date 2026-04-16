@@ -7,6 +7,7 @@ import {
   Search,
   BarChart3,
   Trophy,
+  Flame,
   Activity,
   UserCircle,
   Coins,
@@ -17,6 +18,7 @@ import { useUser } from '@/contexts/UserContext';
 const NAV_ITEMS = [
   { to: '/', label: 'Dashboard', icon: LayoutDashboard, exact: true },
   { to: '/standings', label: 'Standings', icon: Trophy },
+  { to: '/title-race', label: 'Title Race', icon: Flame },
   { to: '/matches', label: 'Matches', icon: Calendar },
   { to: '/betting', label: 'Betting EV', icon: TrendingUp },
   { to: '/fpl', label: 'FPL', icon: Users },
@@ -123,7 +125,7 @@ export default function Sidebar() {
           <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" />
           <span className="text-xs text-slate-500">Data updated 4 min ago</span>
         </div>
-        <p className="text-xs text-slate-600 mt-1">PL 2024/25 · GW32</p>
+        <p className="text-xs text-slate-600 mt-1">PL 2024/25 \u00b7 GW32</p>
       </div>
     </aside>
   );
