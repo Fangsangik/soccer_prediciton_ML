@@ -181,10 +181,47 @@ def _load_model() -> xgb.XGBClassifier | None:
     return _model
 
 
+_MIN_TRAIN_SAMPLES = 50  # below this we skip training and return a fallback
+
+
+def _fallback_response(
+    match_id: int, conn: duckdb.DuckDBPyConnection, reason: str
+) -> dict[str, Any]:
+    """Return a heuristic response when the model isn't ready yet.
+
+    Used during cold starts on Render free tier where the model file and/or
+    historical data haven't been populated yet. Returns a neutral-but-home-favoured
+    prediction so the endpoint doesn't 500.
+    """
+    row = conn.execute(
+        "SELECT home_team_id, away_team_id, status FROM matches WHERE match_id = ?",
+        [match_id],
+    ).fetchone()
+    if not row:
+        return {"error": f"Match {match_id} not found"}
+    home_id, away_id, status = row
+    return {
+        "match_id": match_id,
+        "home_team_id": home_id,
+        "away_team_id": away_id,
+        "status": status,
+        "model_version": "fallback-heuristic",
+        "probabilities": {"home_win": 0.45, "draw": 0.27, "away_win": 0.28},
+        "predicted_score": {"home": 1.4, "away": 1.1},
+        "confidence": 0.45,
+        "key_factors": [],
+        "score_distribution": {},
+        "warming_up": True,
+        "reason": reason,
+    }
+
+
 def predict(match_id: int, conn: duckdb.DuckDBPyConnection) -> dict[str, Any]:
     """Generate a prediction for a given match using XGBoost.
 
     Falls back to training the model on first call if no saved model exists.
+    If training isn't possible yet (insufficient data), returns a heuristic
+    fallback response instead of raising, so cold-start requests don't 500.
 
     Args:
         match_id: The match to predict.
@@ -195,9 +232,23 @@ def predict(match_id: int, conn: duckdb.DuckDBPyConnection) -> dict[str, Any]:
     """
     model = _load_model()
     if model is None:
-        model = train_model(conn)
-        global _model
-        _model = model
+        # Check we have enough finished matches before attempting training
+        finished_count = conn.execute(
+            "SELECT COUNT(*) FROM matches WHERE status = 'FINISHED' AND home_score IS NOT NULL"
+        ).fetchone()[0]
+        if finished_count < _MIN_TRAIN_SAMPLES:
+            return _fallback_response(
+                match_id,
+                conn,
+                f"insufficient training data ({finished_count} finished matches, need {_MIN_TRAIN_SAMPLES}+)",
+            )
+        try:
+            model = train_model(conn)
+            global _model
+            _model = model
+        except Exception as e:
+            print(f"[predict] Training failed on cold start: {e}")
+            return _fallback_response(match_id, conn, f"training failed: {e}")
 
     row = conn.execute(
         "SELECT home_team_id, away_team_id, status FROM matches WHERE match_id = ?",
