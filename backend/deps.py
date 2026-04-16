@@ -6,8 +6,16 @@ from backend.auth import verify_token
 
 
 async def get_database() -> duckdb.DuckDBPyConnection:
-    """FastAPI dependency for DuckDB connection."""
-    return get_db()
+    """FastAPI dependency for DuckDB connection.
+
+    Returns a fresh cursor off the singleton connection so that concurrent
+    request handlers and the background scheduler don't clobber each other's
+    query state (the singleton conn is not safe for concurrent use — one
+    in-flight query on shared conn causes "closed pending query result" or
+    500s on another caller). Cursors share the underlying DB but have
+    independent transaction state.
+    """
+    return get_db().cursor()
 
 
 async def get_current_user(authorization: str = Header(None)) -> dict:
