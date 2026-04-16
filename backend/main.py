@@ -8,7 +8,7 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 
-from backend.routers import health, matches, predictions, betting, fpl, scouting, sync, user, standings
+from backend.routers import health, matches, predictions, betting, fpl, scouting, sync, user, standings, title_race
 from backend.scheduler import setup_scheduler, shutdown_scheduler
 from backend.middleware import global_exception_handler
 
@@ -22,7 +22,7 @@ async def lifespan(app: FastAPI):
     print("[startup] DB initialized. Server ready. Data syncs in background.")
 
     # Start scheduler (handles all syncing in background, non-blocking)
-    setup_scheduler(lambda: get_db().cursor())
+    setup_scheduler(lambda: get_db())
 
     yield
 
@@ -59,6 +59,7 @@ app.include_router(scouting.router, prefix=API_PREFIX)
 app.include_router(sync.router, prefix=API_PREFIX)
 app.include_router(user.router, prefix=API_PREFIX)
 app.include_router(standings.router, prefix=API_PREFIX)
+app.include_router(title_race.router, prefix=API_PREFIX)
 
 # Serve frontend static files in production
 _frontend_dist = Path(__file__).parent.parent / "frontend" / "dist"
