@@ -11,7 +11,7 @@ import xgboost as xgb
 from scipy.stats import poisson
 
 MODEL_PATH = Path(__file__).parent.parent.parent / "data" / "xgb_match_model.pkl"
-MODEL_VERSION = "xgb-v1"
+MODEL_VERSION = "xgb-v2"  # v2: fixed data leakage — features use before_date filter
 
 FEATURE_NAMES = [
     "Home form (win rate)",
@@ -62,11 +62,13 @@ def build_features(
         get_team_form,
     )
 
-    home_form = get_team_form(conn, home_id, n=10)
-    away_form = get_team_form(conn, away_id, n=10)
-    home_splits = get_home_away_splits(conn, home_id)
-    away_splits = get_home_away_splits(conn, away_id)
-    h2h = get_head_to_head(conn, home_id, away_id, n=10)
+    # Pass kickoff as before_date to avoid data leakage: only use matches
+    # that happened BEFORE this match when computing form/splits/h2h.
+    home_form = get_team_form(conn, home_id, n=10, before_date=kickoff)
+    away_form = get_team_form(conn, away_id, n=10, before_date=kickoff)
+    home_splits = get_home_away_splits(conn, home_id, before_date=kickoff)
+    away_splits = get_home_away_splits(conn, away_id, before_date=kickoff)
+    h2h = get_head_to_head(conn, home_id, away_id, n=10, before_date=kickoff)
 
     home_rest = get_rest_days(conn, home_id, kickoff) or 7
     away_rest = get_rest_days(conn, away_id, kickoff) or 7
