@@ -11,6 +11,7 @@ def get_team_form(
     conn: duckdb.DuckDBPyConnection,
     team_id: int,
     n: int = 5,
+    before_date: datetime | None = None,
 ) -> dict[str, Any]:
     """Return form metrics from the last *n* finished matches for *team_id*.
 
@@ -18,31 +19,34 @@ def get_team_form(
         conn: Active DuckDB connection.
         team_id: The team to analyse.
         n: Number of most-recent finished matches to consider.
-
-    Returns:
-        Dict with keys:
-        - ``results``: list of "W"/"D"/"L" strings (most recent last)
-        - ``points``: total points accumulated in the window
-        - ``goals_scored``: total goals scored
-        - ``goals_conceded``: total goals conceded
-        - ``xg_avg``: average xG per match
-        - ``xga_avg``: average xG against per match
-        - ``win_rate``: fraction of matches won
+        before_date: If set, only include matches kicked off strictly before
+            this datetime to avoid data leakage.
     """
-    rows = conn.execute(
-        """
-        SELECT
-            home_team_id, away_team_id,
-            home_score, away_score,
-            home_xg,    away_xg
-        FROM matches
-        WHERE status = 'FINISHED'
-          AND (home_team_id = ? OR away_team_id = ?)
-        ORDER BY kickoff DESC
-        LIMIT ?
-        """,
-        [team_id, team_id, n],
-    ).fetchall()
+    if before_date is not None:
+        rows = conn.execute(
+            """
+            SELECT home_team_id, away_team_id, home_score, away_score, home_xg, away_xg
+            FROM matches
+            WHERE status = 'FINISHED'
+              AND (home_team_id = ? OR away_team_id = ?)
+              AND kickoff < ?
+            ORDER BY kickoff DESC
+            LIMIT ?
+            """,
+            [team_id, team_id, before_date, n],
+        ).fetchall()
+    else:
+        rows = conn.execute(
+            """
+            SELECT home_team_id, away_team_id, home_score, away_score, home_xg, away_xg
+            FROM matches
+            WHERE status = 'FINISHED'
+              AND (home_team_id = ? OR away_team_id = ?)
+            ORDER BY kickoff DESC
+            LIMIT ?
+            """,
+            [team_id, team_id, n],
+        ).fetchall()
 
     results: list[str] = []
     points = 0
@@ -87,34 +91,32 @@ def get_team_form(
 def get_home_away_splits(
     conn: duckdb.DuckDBPyConnection,
     team_id: int,
+    before_date: datetime | None = None,
 ) -> dict[str, Any]:
     """Return home vs away performance splits for *team_id*.
 
     Args:
         conn: Active DuckDB connection.
         team_id: The team to analyse.
-
-    Returns:
-        Dict with ``home`` and ``away`` sub-dicts, each containing:
-        ``matches``, ``wins``, ``draws``, ``losses``,
-        ``goals_scored``, ``goals_conceded``, ``xg_avg``, ``xga_avg``,
-        ``points_per_game``.
+        before_date: If set, only include matches before this datetime.
     """
+    date_filter = " AND kickoff < ?" if before_date is not None else ""
+    date_params = [before_date] if before_date is not None else []
 
     def _split(is_home: bool) -> dict[str, Any]:
         if is_home:
-            q = """
+            q = f"""
                 SELECT home_score, away_score, home_xg, away_xg
                 FROM matches
-                WHERE status = 'FINISHED' AND home_team_id = ?
+                WHERE status = 'FINISHED' AND home_team_id = ?{date_filter}
             """
         else:
-            q = """
+            q = f"""
                 SELECT away_score, home_score, away_xg, home_xg
                 FROM matches
-                WHERE status = 'FINISHED' AND away_team_id = ?
+                WHERE status = 'FINISHED' AND away_team_id = ?{date_filter}
             """
-        rows = conn.execute(q, [team_id]).fetchall()
+        rows = conn.execute(q, [team_id] + date_params).fetchall()
 
         wins = draws = losses = gf_total = ga_total = 0
         xg_sum = xga_sum = 0.0
@@ -156,31 +158,32 @@ def get_head_to_head(
     team1_id: int,
     team2_id: int,
     n: int = 5,
+    before_date: datetime | None = None,
 ) -> dict[str, Any]:
     """Return head-to-head record between *team1_id* and *team2_id*.
 
     Args:
         conn: Active DuckDB connection.
-        team1_id: Reference team (results are from this team's perspective).
+        team1_id: Reference team.
         team2_id: Opponent team.
-        n: Maximum number of recent H2H matches to examine.
-
-    Returns:
-        Dict with keys:
-        ``matches``, ``team1_wins``, ``team2_wins``, ``draws``,
-        ``team1_goals``, ``team2_goals``, ``team1_win_rate``.
+        n: Max recent H2H matches.
+        before_date: If set, only include matches before this datetime.
     """
+    date_filter = " AND kickoff < ?" if before_date is not None else ""
+    date_params = [before_date] if before_date is not None else []
+
     rows = conn.execute(
-        """
+        f"""
         SELECT home_team_id, away_team_id, home_score, away_score
         FROM matches
         WHERE status = 'FINISHED'
           AND ((home_team_id = ? AND away_team_id = ?)
                OR (home_team_id = ? AND away_team_id = ?))
+          {date_filter}
         ORDER BY kickoff DESC
         LIMIT ?
         """,
-        [team1_id, team2_id, team2_id, team1_id, n],
+        [team1_id, team2_id, team2_id, team1_id] + date_params + [n],
     ).fetchall()
 
     t1_wins = t2_wins = draws = t1_goals = t2_goals = 0
