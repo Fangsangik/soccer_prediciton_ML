@@ -41,12 +41,12 @@ def _headers() -> dict[str, str]:
 def _get(path: str, params: dict | None = None) -> dict[str, Any]:
     """Make a rate-limited GET request to football-data.org."""
     url = f"{BASE_URL}{path}"
-    # Short timeout (10s) to prevent scheduler/web server from blocking on API outages
-    resp = httpx.get(url, headers=_headers(), params=params, timeout=10)
+    resp = httpx.get(url, headers=_headers(), params=params, timeout=120)
     if resp.status_code == 429:
-        # Rate limited - wait and retry once
-        time.sleep(6)
-        resp = httpx.get(url, headers=_headers(), params=params, timeout=10)
+        # Rate limited - wait longer and retry once
+        print(f"[football-data] Rate limited on {path}, waiting 15s...")
+        time.sleep(15)
+        resp = httpx.get(url, headers=_headers(), params=params, timeout=120)
     resp.raise_for_status()
     return resp.json()
 
@@ -95,18 +95,12 @@ def sync_league(conn: duckdb.DuckDBPyConnection, league_code: str, season: str =
         )
 
     # 2. Sync teams
-    api_teams = comp_data.get("teams", []) or []
+    api_teams = comp_data.get("teams", [])
     for t in api_teams:
-        if not t or not isinstance(t, dict):
-            continue
-        api_team_id = t.get("id")
-        if api_team_id is None:
-            continue
-        name = t.get("shortName") or t.get("name") or ""
-        if not name:
-            continue
-        tla = t.get("tla") or name[:3].upper()
-        crest = t.get("crest") or ""
+        api_team_id = t["id"]
+        name = t.get("shortName") or t.get("name", "")
+        tla = t.get("tla", name[:3].upper())
+        crest = t.get("crest", "")
 
         existing = conn.execute(
             "SELECT team_id FROM teams WHERE name = ? AND league_id = ?",
@@ -126,19 +120,15 @@ def sync_league(conn: duckdb.DuckDBPyConnection, league_code: str, season: str =
 
         _team_id_cache[api_team_id] = internal_id
 
-    time.sleep(6)  # Rate limit
+    time.sleep(8)  # Rate limit: 10 req/min, need safe margin from Singapore
 
     # 3. Sync matches
     matches_data = _get(f"/competitions/{api_code}/matches", {"season": season})
-    api_matches = matches_data.get("matches", []) or []
+    api_matches = matches_data.get("matches", [])
 
     for m in api_matches:
-        if not m or not isinstance(m, dict):
-            continue
-        home_team = m.get("homeTeam") or {}
-        away_team = m.get("awayTeam") or {}
-        home_api_id = home_team.get("id") if isinstance(home_team, dict) else None
-        away_api_id = away_team.get("id") if isinstance(away_team, dict) else None
+        home_api_id = m.get("homeTeam", {}).get("id")
+        away_api_id = m.get("awayTeam", {}).get("id")
 
         home_id = _team_id_cache.get(home_api_id)
         away_id = _team_id_cache.get(away_api_id)
@@ -163,10 +153,10 @@ def sync_league(conn: duckdb.DuckDBPyConnection, league_code: str, season: str =
         except (ValueError, AttributeError):
             continue
 
-        score = m.get("score") or {}
-        ft = score.get("fullTime") or {} if isinstance(score, dict) else {}
-        home_score = ft.get("home") if isinstance(ft, dict) else None
-        away_score = ft.get("away") if isinstance(ft, dict) else None
+        score = m.get("score", {})
+        ft = score.get("fullTime", {})
+        home_score = ft.get("home")
+        away_score = ft.get("away")
 
         matchday = m.get("matchday", 0)
         api_match_id = m.get("id", 0)
@@ -200,36 +190,25 @@ def sync_league(conn: duckdb.DuckDBPyConnection, league_code: str, season: str =
 
 
 def sync_all_leagues(conn: duckdb.DuckDBPyConnection, season: str = "2025") -> dict[str, Any]:
-    """Sync all supported leagues. Respects rate limits (6s between requests).
-
-    Circuit breaker: skip remaining leagues after 3 consecutive failures to prevent
-    long blocking on API outages or network issues.
-
-    On per-league exception we call conn.rollback() so a mid-transaction failure
-    in one league (e.g. None field in API response) doesn't leave the DuckDB
-    connection in a broken state ("closed pending query result") that makes
-    every subsequent league fail too.
-    """
+    """Sync all supported leagues. Respects rate limits (6s between requests)."""
     results = {}
-    consecutive_failures = 0
-    for code in LEAGUE_MAP:
-        if consecutive_failures >= 3:
-            results[code] = {"skipped": "circuit breaker open"}
-            print(f"[football-data] {code} skipped (3 consecutive failures)")
-            continue
+    league_codes = list(LEAGUE_MAP.keys())
+    for i, code in enumerate(league_codes):
         try:
+            print(f"[football-data] Syncing {code} ({i+1}/{len(league_codes)})...")
             stats = sync_league(conn, code, season)
             results[code] = stats
             print(f"[football-data] {code}: {stats}")
-            consecutive_failures = 0
-            time.sleep(6)
+            # Wait between leagues to respect 10 req/min rate limit
+            # Each sync_league does 2 API calls with 8s between them,
+            # so we add 8s more between leagues for safe margin
+            if i < len(league_codes) - 1:
+                print(f"[football-data] Waiting 8s before next league...")
+                time.sleep(8)
         except Exception as e:
             results[code] = {"error": str(e)}
             print(f"[football-data] {code} failed: {e}")
-            consecutive_failures += 1
-            # Reset connection state so next league starts cleanly
-            try:
-                conn.rollback()
-            except Exception:
-                pass
+            # Still wait before next league even on failure
+            if i < len(league_codes) - 1:
+                time.sleep(8)
     return results
