@@ -4,7 +4,7 @@ import { Trophy, Crown, TrendingDown, Shield, Loader2, BarChart3, Flame } from '
 import { useLeague } from '@/contexts/LeagueContext';
 import client from '@/api/client';
 
-// Types
+// ─── Types ──────────────────────────────────────────────────────────────────
 
 interface LeagueTeamSim {
   team_id: number;
@@ -43,12 +43,62 @@ interface CLSimResult {
   simulations: number;
   remaining_knockout_matches: number;
   active_teams: number;
+  bracket_generated?: boolean;
   teams: CLTeamSim[];
 }
 
-type TabType = 'league' | 'cl';
+type TabType = 'league' | 'cl' | 'el' | 'ecl';
 
-// Probability Bar
+interface TabConfig {
+  key: TabType;
+  label: string;
+  icon: typeof Trophy;
+  activeColor: string;
+  accentColor: string;
+  endpoint: string;
+  noDataMsg: string;
+}
+
+const TABS: TabConfig[] = [
+  {
+    key: 'league',
+    label: 'League Title',
+    icon: Crown,
+    activeColor: 'bg-emerald-600',
+    accentColor: 'emerald',
+    endpoint: '/title-race/league',
+    noDataMsg: 'No league data available for this season.',
+  },
+  {
+    key: 'cl',
+    label: 'Champions League',
+    icon: Trophy,
+    activeColor: 'bg-indigo-600',
+    accentColor: 'indigo',
+    endpoint: '/title-race/champions-league',
+    noDataMsg: 'No Champions League data available for this season.',
+  },
+  {
+    key: 'el',
+    label: 'Europa League',
+    icon: Shield,
+    activeColor: 'bg-orange-600',
+    accentColor: 'orange',
+    endpoint: '/title-race/europa-league',
+    noDataMsg: 'No Europa League data available. API plan upgrade may be required for EL data.',
+  },
+  {
+    key: 'ecl',
+    label: 'Conference League',
+    icon: Shield,
+    activeColor: 'bg-green-600',
+    accentColor: 'green',
+    endpoint: '/title-race/conference-league',
+    noDataMsg: 'No Conference League data available. API plan upgrade may be required for ECL data.',
+  },
+];
+
+// ─── Probability Bar ────────────────────────────────────────────────────────
 
 function ProbBar({ value, color, max = 1 }: { value: number; color: string; max?: number }) {
   const pct = Math.min(100, (value / max) * 100);
@@ -75,7 +125,7 @@ function PctLabel({ value }: { value: number }) {
   );
 }
 
-// League Title Race Table
+// ─── League Title Race Table ────────────────────────────────────────────────
 
 function LeagueTitleTable({ data }: { data: LeagueSimResult }) {
   const maxTitle = Math.max(...data.teams.map(t => t.title_probability), 0.01);
@@ -95,13 +145,13 @@ function LeagueTitleTable({ data }: { data: LeagueSimResult }) {
         </div>
         <div className="bg-slate-800/50 border border-emerald-700/30 rounded-lg p-3">
           <div className="text-[10px] uppercase tracking-wider text-emerald-500 mb-1">Favourite</div>
-          <div className="text-lg font-bold text-emerald-400">{data.teams[0]?.name ?? '\u2014'}</div>
+          <div className="text-lg font-bold text-emerald-400">{data.teams[0]?.name ?? '—'}</div>
           <div className="text-[10px] text-emerald-500/70">{((data.teams[0]?.title_probability ?? 0) * 100).toFixed(1)}%</div>
         </div>
         <div className="bg-slate-800/50 border border-red-700/30 rounded-lg p-3">
           <div className="text-[10px] uppercase tracking-wider text-red-500 mb-1">Most at Risk</div>
           <div className="text-lg font-bold text-red-400">
-            {data.teams.filter(t => t.relegation_probability > 0).sort((a, b) => b.relegation_probability - a.relegation_probability)[0]?.name ?? '\u2014'}
+            {data.teams.filter(t => t.relegation_probability > 0).sort((a, b) => b.relegation_probability - a.relegation_probability)[0]?.name ?? '—'}
           </div>
           <div className="text-[10px] text-red-500/70">
             {((data.teams.filter(t => t.relegation_probability > 0).sort((a, b) => b.relegation_probability - a.relegation_probability)[0]?.relegation_probability ?? 0) * 100).toFixed(1)}% relegation
@@ -188,7 +238,7 @@ function LeagueTitleTable({ data }: { data: LeagueSimResult }) {
                         {(team.relegation_probability * 100).toFixed(1)}%
                       </span>
                     ) : (
-                      <span className="text-slate-700 text-xs">\u2014</span>
+                      <span className="text-slate-700 text-xs">—</span>
                     )}
                   </td>
                   <td className="hidden md:table-cell text-center px-2 py-2.5 font-mono text-slate-400">{team.predicted_points}</td>
@@ -202,10 +252,20 @@ function LeagueTitleTable({ data }: { data: LeagueSimResult }) {
   );
 }
 
-// Champions League Table
+// ─── European Competition Table (CL / EL / ECL) ────────────────────────────
 
-function CLWinnerTable({ data }: { data: CLSimResult }) {
+function EuropeanCompTable({ data, config }: { data: CLSimResult; config: TabConfig }) {
   const maxWin = Math.max(...data.teams.map(t => t.win_probability), 0.01);
+  const accentMap: Record<string, { border: string; text: string; textLight: string; bar: string }> = {
+    indigo: { border: 'border-indigo-700/30', text: 'text-indigo-400', textLight: 'text-indigo-300', bar: 'bg-indigo-500' },
+    orange: { border: 'border-orange-700/30', text: 'text-orange-400', textLight: 'text-orange-300', bar: 'bg-orange-500' },
+    green: { border: 'border-green-700/30', text: 'text-green-400', textLight: 'text-green-300', bar: 'bg-green-500' },
+  };
+  const accent = accentMap[config.accentColor] ?? accentMap.indigo;
+
+  const visibleTeams = data.teams.filter(
+    t => t.win_probability > 0 || t.semifinal_probability > 0 || t.quarterfinal_probability > 0
+  );
 
   return (
     <div className="space-y-4">
@@ -216,76 +276,84 @@ function CLWinnerTable({ data }: { data: CLSimResult }) {
           <div className="text-lg font-bold text-slate-200 font-mono">{data.active_teams}</div>
         </div>
         <div className="bg-slate-800/50 border border-slate-700/50 rounded-lg p-3">
-          <div className="text-[10px] uppercase tracking-wider text-slate-500 mb-1">Remaining KO</div>
-          <div className="text-lg font-bold text-slate-200 font-mono">{data.remaining_knockout_matches}</div>
-          <div className="text-[10px] text-slate-500">matches</div>
+          <div className="text-[10px] uppercase tracking-wider text-slate-500 mb-1">
+            {data.bracket_generated ? 'Bracket' : 'Remaining KO'}
+          </div>
+          <div className="text-lg font-bold text-slate-200 font-mono">
+            {data.bracket_generated ? 'Generated' : data.remaining_knockout_matches}
+          </div>
+          <div className="text-[10px] text-slate-500">
+            {data.bracket_generated ? 'from league stage' : 'matches'}
+          </div>
         </div>
-        <div className="bg-slate-800/50 border border-indigo-700/30 rounded-lg p-3 col-span-2 md:col-span-1">
-          <div className="text-[10px] uppercase tracking-wider text-indigo-400 mb-1">Favourite</div>
-          <div className="text-lg font-bold text-indigo-300">{data.teams[0]?.name ?? '\u2014'}</div>
-          <div className="text-[10px] text-indigo-400/70">{((data.teams[0]?.win_probability ?? 0) * 100).toFixed(1)}%</div>
+        <div className={clsx('bg-slate-800/50 rounded-lg p-3 col-span-2 md:col-span-1 border', accent.border)}>
+          <div className={clsx('text-[10px] uppercase tracking-wider mb-1', accent.text)}>Favourite</div>
+          <div className={clsx('text-lg font-bold', accent.textLight)}>{data.teams[0]?.name ?? '—'}</div>
+          <div className={clsx('text-[10px] opacity-70', accent.text)}>
+            {((data.teams[0]?.win_probability ?? 0) * 100).toFixed(1)}%
+          </div>
         </div>
       </div>
 
       {/* Table */}
-      <div className="bg-slate-800/50 border border-slate-700/50 rounded-lg overflow-hidden">
-        <table className="w-full text-xs">
-          <thead>
-            <tr className="bg-slate-800 border-b border-slate-700">
-              <th className="w-8 px-3 py-2.5 text-left text-slate-500 font-medium">#</th>
-              <th className="px-3 py-2.5 text-left text-slate-500 font-medium">Team</th>
-              <th className="w-20 px-2 py-2.5 text-center text-slate-500 font-medium">
-                <div className="flex items-center justify-center gap-1">
-                  <Trophy className="w-3 h-3 text-amber-400" /> Winner
-                </div>
-              </th>
-              <th className="hidden md:table-cell w-32 px-2 py-2.5 text-center text-slate-500 font-medium">Win Prob</th>
-              <th className="w-20 px-2 py-2.5 text-center text-slate-500 font-medium">Semi</th>
-              <th className="w-20 px-2 py-2.5 text-center text-slate-500 font-medium">Quarter</th>
-            </tr>
-          </thead>
-          <tbody>
-            {data.teams.filter(t => t.win_probability > 0 || t.semifinal_probability > 0 || t.quarterfinal_probability > 0).map((team, i) => (
-              <tr
-                key={team.team_id}
-                className={clsx(
-                  'border-b border-slate-700/30 hover:bg-slate-700/20 transition-colors',
-                  i === 0 && 'bg-indigo-500/5',
-                )}
-              >
-                <td className={clsx('px-3 py-2.5 font-mono font-bold', i === 0 ? 'text-indigo-400' : 'text-slate-500')}>
-                  {i + 1}
-                </td>
-                <td className="px-3 py-2.5">
-                  <div className="flex items-center gap-2">
-                    {i === 0 && <Trophy className="w-3.5 h-3.5 text-amber-400" />}
-                    <span className={clsx('font-medium', i === 0 ? 'text-indigo-200' : 'text-slate-200')}>
-                      {team.name}
-                    </span>
+      {visibleTeams.length > 0 ? (
+        <div className="bg-slate-800/50 border border-slate-700/50 rounded-lg overflow-hidden">
+          <table className="w-full text-xs">
+            <thead>
+              <tr className="bg-slate-800 border-b border-slate-700">
+                <th className="w-8 px-3 py-2.5 text-left text-slate-500 font-medium">#</th>
+                <th className="px-3 py-2.5 text-left text-slate-500 font-medium">Team</th>
+                <th className="w-20 px-2 py-2.5 text-center text-slate-500 font-medium">
+                  <div className="flex items-center justify-center gap-1">
+                    <Trophy className="w-3 h-3 text-amber-400" /> Winner
                   </div>
-                </td>
-                <td className="text-center px-2 py-2.5"><PctLabel value={team.win_probability} /></td>
-                <td className="hidden md:table-cell px-3 py-2.5">
-                  <ProbBar value={team.win_probability} max={maxWin} color="bg-indigo-500" />
-                </td>
-                <td className="text-center px-2 py-2.5"><PctLabel value={team.semifinal_probability} /></td>
-                <td className="text-center px-2 py-2.5"><PctLabel value={team.quarterfinal_probability} /></td>
+                </th>
+                <th className="hidden md:table-cell w-32 px-2 py-2.5 text-center text-slate-500 font-medium">Win Prob</th>
+                <th className="w-20 px-2 py-2.5 text-center text-slate-500 font-medium">Semi</th>
+                <th className="w-20 px-2 py-2.5 text-center text-slate-500 font-medium">Quarter</th>
               </tr>
-            ))}
-          </tbody>
-        </table>
-      </div>
-
-      {data.teams.length === 0 && (
+            </thead>
+            <tbody>
+              {visibleTeams.map((team, i) => (
+                <tr
+                  key={team.team_id}
+                  className={clsx(
+                    'border-b border-slate-700/30 hover:bg-slate-700/20 transition-colors',
+                    i === 0 && `${config.accentColor === 'indigo' ? 'bg-indigo-500/5' : config.accentColor === 'orange' ? 'bg-orange-500/5' : 'bg-green-500/5'}`,
+                  )}
+                >
+                  <td className={clsx('px-3 py-2.5 font-mono font-bold', i === 0 ? accent.text : 'text-slate-500')}>
+                    {i + 1}
+                  </td>
+                  <td className="px-3 py-2.5">
+                    <div className="flex items-center gap-2">
+                      {i === 0 && <Trophy className="w-3.5 h-3.5 text-amber-400" />}
+                      <span className={clsx('font-medium', i === 0 ? accent.textLight : 'text-slate-200')}>
+                        {team.name}
+                      </span>
+                    </div>
+                  </td>
+                  <td className="text-center px-2 py-2.5"><PctLabel value={team.win_probability} /></td>
+                  <td className="hidden md:table-cell px-3 py-2.5">
+                    <ProbBar value={team.win_probability} max={maxWin} color={accent.bar} />
+                  </td>
+                  <td className="text-center px-2 py-2.5"><PctLabel value={team.semifinal_probability} /></td>
+                  <td className="text-center px-2 py-2.5"><PctLabel value={team.quarterfinal_probability} /></td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      ) : (
         <div className="text-center py-12 text-slate-500 text-sm">
-          No Champions League knockout data available for this season.
+          {config.noDataMsg}
         </div>
       )}
     </div>
   );
 }
 
-// Loading Skeleton
+// ─── Loading Skeleton ───────────────────────────────────────────────────────
 
 function TableSkeleton() {
   return (
@@ -304,15 +372,19 @@ function TableSkeleton() {
   );
 }
 
-// Main Page
+// ─── Main Page ──────────────────────────────────────────────────────────────
 
 export default function TitleRace() {
   const { league, apiSeason } = useLeague();
   const [tab, setTab] = useState<TabType>('league');
   const [leagueData, setLeagueData] = useState<LeagueSimResult | null>(null);
   const [clData, setClData] = useState<CLSimResult | null>(null);
+  const [elData, setElData] = useState<CLSimResult | null>(null);
+  const [eclData, setEclData] = useState<CLSimResult | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+
+  const activeTab = TABS.find(t => t.key === tab)!;
 
   useEffect(() => {
     setLoading(true);
@@ -324,11 +396,21 @@ export default function TitleRace() {
           params: { league, season: apiSeason, simulations: 5000 },
         });
         setLeagueData(res as unknown as LeagueSimResult);
-      } else {
+      } else if (tab === 'cl') {
         const res = await client.get('/title-race/champions-league', {
           params: { season: apiSeason, simulations: 5000 },
         });
         setClData(res as unknown as CLSimResult);
+      } else if (tab === 'el') {
+        const res = await client.get('/title-race/europa-league', {
+          params: { season: apiSeason, simulations: 5000 },
+        });
+        setElData(res as unknown as CLSimResult);
+      } else if (tab === 'ecl') {
+        const res = await client.get('/title-race/conference-league', {
+          params: { season: apiSeason, simulations: 5000 },
+        });
+        setEclData(res as unknown as CLSimResult);
       }
       setLoading(false);
     };
@@ -339,6 +421,13 @@ export default function TitleRace() {
     });
   }, [league, apiSeason, tab]);
 
+  const getCompData = (): CLSimResult | null => {
+    if (tab === 'cl') return clData;
+    if (tab === 'el') return elData;
+    if (tab === 'ecl') return eclData;
+    return null;
+  };
+
   return (
     <div className="space-y-5 max-w-7xl">
       {/* Header */}
@@ -348,40 +437,32 @@ export default function TitleRace() {
             <BarChart3 className="w-5 h-5 text-emerald-400" />
             Title Race Predictions
           </h1>
-          <p className="text-xs text-slate-500 mt-0.5">Monte Carlo simulation \u00b7 5,000 season simulations</p>
+          <p className="text-xs text-slate-500 mt-0.5">Monte Carlo simulation · 5,000 season simulations · Poisson goals + Elo ratings</p>
         </div>
       </div>
 
       {/* Tab switcher */}
-      <div className="flex gap-1 bg-slate-800/50 border border-slate-700/50 rounded-lg p-1 w-fit">
-        <button
-          onClick={() => setTab('league')}
-          className={clsx(
-            'px-4 py-1.5 rounded-md text-xs font-medium transition-all',
-            tab === 'league'
-              ? 'bg-emerald-600 text-white shadow-sm'
-              : 'text-slate-400 hover:text-slate-200 hover:bg-slate-700/50',
-          )}
-        >
-          <div className="flex items-center gap-1.5">
-            <Crown className="w-3.5 h-3.5" />
-            League Title
-          </div>
-        </button>
-        <button
-          onClick={() => setTab('cl')}
-          className={clsx(
-            'px-4 py-1.5 rounded-md text-xs font-medium transition-all',
-            tab === 'cl'
-              ? 'bg-indigo-600 text-white shadow-sm'
-              : 'text-slate-400 hover:text-slate-200 hover:bg-slate-700/50',
-          )}
-        >
-          <div className="flex items-center gap-1.5">
-            <Trophy className="w-3.5 h-3.5" />
-            Champions League
-          </div>
-        </button>
+      <div className="flex gap-1 bg-slate-800/50 border border-slate-700/50 rounded-lg p-1 w-fit flex-wrap">
+        {TABS.map((t) => {
+          const Icon = t.icon;
+          return (
+            <button
+              key={t.key}
+              onClick={() => setTab(t.key)}
+              className={clsx(
+                'px-3 py-1.5 rounded-md text-xs font-medium transition-all',
+                tab === t.key
+                  ? `${t.activeColor} text-white shadow-sm`
+                  : 'text-slate-400 hover:text-slate-200 hover:bg-slate-700/50',
+              )}
+            >
+              <div className="flex items-center gap-1.5">
+                <Icon className="w-3.5 h-3.5" />
+                {t.label}
+              </div>
+            </button>
+          );
+        })}
       </div>
 
       {/* Content */}
@@ -399,12 +480,13 @@ export default function TitleRace() {
         </div>
       ) : tab === 'league' && leagueData ? (
         <LeagueTitleTable data={leagueData} />
-      ) : tab === 'cl' && clData ? (
-        <CLWinnerTable data={clData} />
+      ) : (tab === 'cl' || tab === 'el' || tab === 'ecl') && getCompData() ? (
+        <EuropeanCompTable data={getCompData()!} config={activeTab} />
       ) : (
-        <div className="text-center py-12 text-slate-500 text-sm">No data available</div>
+        <div className="text-center py-12 text-slate-500 text-sm">
+          {activeTab.noDataMsg}
+        </div>
       )}
     </div>
   );
 }
-

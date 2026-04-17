@@ -1,4 +1,4 @@
-"""Title Race & Champions League winner prediction endpoints."""
+"""Title Race & CL/EL/ECL winner prediction endpoints."""
 from __future__ import annotations
 
 from typing import Any
@@ -51,4 +51,46 @@ async def champions_league_prediction(
     except Exception as exc:
         raise HTTPException(
             status_code=500, detail=f"CL simulation failed: {str(exc)}"
+        ) from exc
+
+
+@router.get("/europa-league")
+async def europa_league_prediction(
+    season: str = Query("2025-26"),
+    simulations: int = Query(5000, ge=100, le=20000),
+    conn: duckdb.DuckDBPyConnection = Depends(get_database),
+) -> dict[str, Any]:
+    """Monte Carlo simulation for Europa League winner."""
+    try:
+        from backend.models.season_simulator import simulate_europa_league
+        result = simulate_europa_league(conn, season, n_simulations=simulations)
+        if "error" in result:
+            raise HTTPException(status_code=404, detail=result["error"])
+        return result
+    except HTTPException:
+        raise
+    except Exception as exc:
+        raise HTTPException(
+            status_code=500, detail=f"EL simulation failed: {str(exc)}"
+        ) from exc
+
+
+@router.get("/conference-league")
+async def conference_league_prediction(
+    season: str = Query("2025-26"),
+    simulations: int = Query(5000, ge=100, le=20000),
+    conn: duckdb.DuckDBPyConnection = Depends(get_database),
+) -> dict[str, Any]:
+    """Monte Carlo simulation for Conference League winner."""
+    try:
+        from backend.models.season_simulator import simulate_conference_league
+        result = simulate_conference_league(conn, season, n_simulations=simulations)
+        if "error" in result:
+            raise HTTPException(status_code=404, detail=result["error"])
+        return result
+    except HTTPException:
+        raise
+    except Exception as exc:
+        raise HTTPException(
+            status_code=500, detail=f"ECL simulation failed: {str(exc)}"
         ) from exc
